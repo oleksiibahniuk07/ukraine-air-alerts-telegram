@@ -1,4 +1,4 @@
-# 🚨 Air Alerts Telegram — Zhytomyr District, Ukraine
+# 🚨 Air Alerts Telegram — Air Raid Alert Notifications for Ukraine
 
 🇬🇧 **English** | 🇺🇦 [Українська](README.md)
 
@@ -6,9 +6,27 @@
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-green)](https://developers.google.com/apps-script)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Air Alerts Telegram** is an independent, serverless notification project that monitors air raid alerts for **Zhytomyr District, Ukraine** and posts updates to a Telegram channel. It is built with Google Apps Script, uses the publicly accessible Ubilling / alerts.in.ua data feed, and stores an event history in Google Sheets.
+**Air Alerts Telegram** is an open-source, serverless template for Telegram air raid alert notifications in Ukraine. Its **default example monitors Zhytomyr District**, including region-wide alerts. Built with Google Apps Script, it uses the Ubilling / alerts.in.ua feed and Google Sheets for event history. The template can be adapted to other Ukrainian districts and regions supported by the data source.
 
 > **Safety notice:** This is **not** an official emergency notification system. API failures, scheduling delays and Telegram outages can delay messages. Always follow official Ukrainian air raid alert services and civil protection instructions. Never use this project as your only source of safety information.
+
+## 🌍 Adaptable to Other Ukrainian Regions
+
+**Zhytomyr District is the included example configuration, not a limitation of the design.** You can adapt this repository for a Telegram channel serving another Ukrainian district or region **when the data source provides alert coverage and identifiers for that location**.
+
+Update the following in `src/Code.gs`:
+
+| Setting | What to customize |
+|---|---|
+| `DISTRICT_UID`, `DISTRICT_NAME` | Target district ID and name |
+| `OBLAST_UID`, `OBLAST_NAME` | Corresponding region ID and name |
+| `YELLOW_MESSAGE`, `RED_MESSAGE`, `CLEAR_MESSAGE_TITLE` | User-facing notification titles |
+| `STATE_SCOPE_KEY` | Unique key for the new monitoring scope |
+| `buildWeeklyStatisticsMessage()` | No-alert weekly report text, which currently names Zhytomyr District |
+
+Configure your own Telegram destination and Google Sheet using **Apps Script Properties**, and verify the result in a test channel. **Do not reuse Zhytomyr's identifiers for another location**; check them against current API data.
+
+> This is a **customizable regional template, not a one-click universal bot**. Cities or communities without separate source identifiers may require changes to the location matching logic. It does not replace official emergency alerts.
 
 ## Features
 
