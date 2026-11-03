@@ -1,0 +1,27 @@
+# Google Apps Script / clasp credentials and local project routing
+.clasp.json
+.clasprc.json
+.clasp/
+
+# Local secrets and exports
+.env
+.env.*
+!.env.example
+secrets.json
+credentials.json
+token.json
+script-properties*.json
+*secret*.backup
+*.pem
+*.key
+
+# Node / OS / editor
+node_modules/
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.zip
+
+# Private source snapshots; only publish curated src/
+alert-sources/
