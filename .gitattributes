@@ -1,0 +1,3 @@
+*.gs linguist-language=JavaScript
+*.gs text eol=lf
+*.md text eol=lf
