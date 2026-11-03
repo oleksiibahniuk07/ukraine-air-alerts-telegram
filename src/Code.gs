@@ -2168,33 +2168,6 @@ function testRegionApi() {
   return result;
 }
 
-/** Залишено для сумісності старих інструкцій. */
-function legacyTestDistrictLevelsApi_() {
-  validateConfig();
-
-  const snapshot = getDistrictAlertSnapshot();
-
-  console.log(
-    JSON.stringify(
-      {
-        district: CONFIG.DISTRICT_NAME,
-        districtUid: CONFIG.DISTRICT_UID,
-        resolvedLevel: snapshot.level,
-        active: snapshot.active,
-        matchedCount: snapshot.matchedCount,
-        totalActiveAlertsInSource: snapshot.totalActiveAlerts,
-        startedAt: snapshot.startedAt
-          ? new Date(snapshot.startedAt).toISOString()
-          : null,
-        sourceUpdatedAt: snapshot.sourceUpdatedAt,
-        matchedAlerts: snapshot.matchedAlerts
-      },
-      null,
-      2
-    )
-  );
-}
-
 function testYellowMessage() {
   publishTestMessage(
     '🧪 <b>ТЕСТ СИСТЕМИ ОПОВІЩЕННЯ</b>' +
