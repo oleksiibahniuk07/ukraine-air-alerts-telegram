@@ -10,27 +10,29 @@
 
 > **Safety notice:** This is **not** an official emergency notification system. API failures, scheduling delays and Telegram outages can delay messages. Always follow official Ukrainian air raid alert services and civil protection instructions. Never use this project as your only source of safety information.
 
-## 🌍 Adaptable to Other Ukrainian Regions
+## 🌍 Configure Other Ukrainian Regions Without Editing Code
 
-**Zhytomyr District is the included example configuration, not a limitation of the design.** You can adapt this repository for a Telegram channel serving another Ukrainian district or region **when the data source provides alert coverage and identifiers for that location**.
+**Zhytomyr District is only the example configuration.** The new version selects a monitoring territory with **Google Apps Script → Script Properties**. You do not need to edit `src/Code.gs`.
 
-Update the following in `src/Code.gs`:
+- **`REGION_MODE=district`** monitors the selected district **plus** region-wide alerts.
+- **`REGION_MODE=oblast`** monitors alerts issued **at the oblast (region) level**. To include district-specific alerts, explicitly list verified district IDs in `ADDITIONAL_DISTRICT_UIDS`. Without them, **district alerts across the entire oblast are not covered**.
 
-| Setting | What to customize |
-|---|---|
-| `DISTRICT_UID`, `DISTRICT_NAME` | Target district ID and name |
-| `OBLAST_UID`, `OBLAST_NAME` | Corresponding region ID and name |
-| `YELLOW_MESSAGE`, `RED_MESSAGE`, `CLEAR_MESSAGE_TITLE` | User-facing notification titles |
-| `STATE_SCOPE_KEY` | Unique key for the new monitoring scope |
-| `buildWeeklyStatisticsMessage()` | No-alert weekly report text, which currently names Zhytomyr District |
+| Property | District mode | Oblast mode |
+|---|---|---|
+| `REGION_MODE` | `district` | `oblast` |
+| `DISTRICT_UID`, `DISTRICT_NAME` | Required | Leave unset |
+| `OBLAST_UID`, `OBLAST_NAME` | Required | Required |
+| `ADDITIONAL_DISTRICT_UIDS` | Leave unset | Optional comma-separated district IDs |
 
-Configure your own Telegram destination and Google Sheet using **Apps Script Properties**, and verify the result in a test channel. **Do not reuse Zhytomyr's identifiers for another location**; check them against current API data.
+When **no regional properties** are set, the bundled example uses **Zhytomyr District (59) and Zhytomyr Oblast (10)**. For other territories, supply a complete configuration; partially filled settings do not silently inherit the sample IDs.
 
-> This is a **customizable regional template, not a one-click universal bot**. Cities or communities without separate source identifiers may require changes to the location matching logic. It does not replace official emergency alerts.
+Run **`setupRegion()`** before enabling triggers. It checks configuration and active API events, but **cannot confirm the existence of a UID when no relevant alert is active**. Verify identifiers against current source data. Use a separate Google Sheet for each monitoring territory.
+
+See the detailed [configuration and safety guide](docs/SCRIPT_PROPERTIES.md) (Ukrainian).
 
 ## Features
 
-- Checks alerts **every minute**, combining the district (`59`) and region (`10`) when the entire Zhytomyr region is affected.
+- Checks alerts **every minute** for the territory selected via Script Properties (default example: district `59` and region `10`).
 - Publishes state changes only: 🟡 **yellow**, 🔴 **red**, and 🟢 **all clear**. Drone-related warnings are represented by the yellow level in this implementation, **not counted as a separate alert type**.
 - Includes the elapsed alert duration in all-clear messages.
 - Records events in Google Sheets (`Тривоги`, `Події`, `Тижневі звіти`).
@@ -76,7 +78,7 @@ air-alerts-github/
    | `HISTORY_SPREADSHEET_ID` | ID of the new Google Sheet |
 
 5. Add your bot as an **administrator of the test channel**, allowed to post and delete messages.
-6. Run `testDistrictLevelsApi()` to check the API without posting, followed by `testHistoryConnection()` to check spreadsheet access; grant the requested permissions.
+6. For another region, set the additional Script Properties shown above. Run `setupRegion()` to inspect the configuration and API **without posting**; verify UID values against the data source even when no alerts are active. Then run `testHistoryConnection()` and grant the necessary permissions.
 7. Run `testYellowMessage()` to post a clearly marked test message. It is scheduled for cleanup after approximately 2–5 minutes.
 8. Run `setupAutomation()` to install monitoring, cleanup and weekly summary triggers. Run `showSystemStatus()` to inspect the status without printing secrets.
 
@@ -134,7 +136,7 @@ Offline tests cover silent-hour boundaries (including Kyiv DST changes), threat-
 - Deduplication works **per installation**; running two copies on one channel may produce duplicates.
 - Script Properties belong to an individual Apps Script project. They do not automatically transfer to a copy and can be viewed by its editors, so restrict project access.
 - Use a test channel before migration. To switch installations, stop the old project's triggers (`removeAutomation()`), then configure and enable the new one. **No change to the existing project is needed to publish the source on GitHub.**
-- To change the monitored location, adjust `DISTRICT_UID`, `DISTRICT_NAME`, `OBLAST_UID`, `OBLAST_NAME`, and the user-facing messages together. Validate the source's identifiers first.
+- Select your location using Script Properties, without editing source code. Oblast mode does **not** automatically aggregate district-level alerts unless their verified IDs are listed in `ADDITIONAL_DISTRICT_UIDS`. An empty active-alert result does not validate a location UID.
 
 Full configuration and migration notes (Ukrainian): [docs/SCRIPT_PROPERTIES.md](docs/SCRIPT_PROPERTIES.md).
 
