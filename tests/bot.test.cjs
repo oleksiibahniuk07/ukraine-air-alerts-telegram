@@ -8,13 +8,14 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../src/Code.gs'), 'utf8');
 
-function createBot() {
+function createBot(overrides = {}) {
   const fetches = [];
   const values = {
     TELEGRAM_BOT_TOKEN: 'EXAMPLE_TOKEN_FROM_PRIVATE_PROPERTIES',
     TARGET_CHAT_ID: '@test_channel',
     CHANNEL_FOOTER: '📲 @test_channel',
-    HISTORY_SPREADSHEET_ID: 'EXAMPLE_SHEET_ID_FROM_PRIVATE_PROPERTIES'
+    HISTORY_SPREADSHEET_ID: 'EXAMPLE_SHEET_ID_FROM_PRIVATE_PROPERTIES',
+    ...overrides
   };
   const context = {
     console,
@@ -139,4 +140,95 @@ test('no-alert week report is short and does not introduce a separate drone coun
   assert.match(msg, /За минулий тиждень повітряних тривог/);
   assert.doesNotMatch(msg, /дронов/i);
   assert.match(msg, /@test_channel/);
+});
+
+test('custom district settings change matching, text and scope without code edits', () => {
+  const {context} = createBot({
+    REGION_MODE: 'district',
+    DISTRICT_UID: '501',
+    DISTRICT_NAME: 'Тестовий район',
+    OBLAST_UID: '50',
+    OBLAST_NAME: 'Тестова область'
+  });
+  context.validateRegionConfig_();
+  assert.equal(context.isRelevantLocation({location_uid: 501}), true);
+  assert.equal(context.isRelevantLocation({location_uid: 50}), true);
+  assert.equal(context.isRelevantLocation({location_uid: 59}), false);
+  assert.equal(context.isRelevantLocation({location_uid: 10}), false);
+  const info = vm.runInContext('({mode:CONFIG.REGION_MODE, text:CONFIG.RED_MESSAGE,scope:CONFIG.STATE_SCOPE_KEY})', context);
+  assert.equal(info.mode, 'district');
+  assert.match(info.text, /Тестовий район/);
+  assert.match(info.scope, /district:50:501/);
+  const msg = context.buildWeeklyStatisticsMessage({count:0},new Date(),new Date());
+  assert.match(msg, /Тестовий район/);
+  assert.doesNotMatch(msg, /Житомирському районі/);
+});
+
+test('oblast-only mode excludes unrelated district alerts by default', () => {
+  const {context} = createBot({
+    REGION_MODE: 'oblast',
+    OBLAST_UID: '50',
+    OBLAST_NAME: 'Тестова область'
+  });
+  context.validateRegionConfig_();
+  assert.equal(context.isRelevantLocation({location_uid:50}),true);
+  assert.equal(context.isRelevantLocation({location_uid:501}),false);
+  assert.equal(context.isRelevantLocation({location_uid:10}),false);
+  const info = vm.runInContext('({text:CONFIG.YELLOW_MESSAGE,scope:CONFIG.STATE_SCOPE_KEY})',context);
+  assert.match(info.text, /Тестова область/);
+  assert.match(info.scope, /oblast:50/);
+});
+
+test('oblast mode can explicitly cover selected district UID list', () => {
+  const {context} = createBot({
+    REGION_MODE: 'oblast',
+    OBLAST_UID: '50',
+    OBLAST_NAME: 'Тестова область',
+    ADDITIONAL_DISTRICT_UIDS: '501, 502'
+  });
+  context.validateRegionConfig_();
+  assert.equal(context.isRelevantLocation({location_uid:501}),true);
+  assert.equal(context.isRelevantLocation({location_uid:502}),true);
+  assert.equal(context.isRelevantLocation({location_uid:503}),false);
+  const info = vm.runInContext('CONFIG.STATE_SCOPE_KEY',context);
+  assert.match(info,/oblast:50:501:502/);
+});
+
+test('incomplete region property overrides fail rather than silently falling back', () => {
+  const {context} = createBot({REGION_MODE:'district',DISTRICT_UID:'501'});
+  assert.throws(()=>context.validateRegionConfig_(),/OBLAST_UID/);
+  assert.throws(()=>context.setupRegion(),/OBLAST_UID/);
+});
+
+test('invalid region mode and duplicate district IDs are rejected', () => {
+  const bad = createBot({REGION_MODE:'city',OBLAST_UID:'50',OBLAST_NAME:'Тестова область'});
+  assert.throws(()=>bad.context.validateRegionConfig_(),/REGION_MODE/);
+  const duplicates=createBot({REGION_MODE:'oblast',OBLAST_UID:'50',OBLAST_NAME:'Тестова область',ADDITIONAL_DISTRICT_UIDS:'501,501'});
+  assert.throws(()=>duplicates.context.validateRegionConfig_(),/дублікати/);
+});
+
+test('region names are escaped before inserting into Telegram HTML', () => {
+  const {context} = createBot({
+    REGION_MODE: 'oblast',
+    OBLAST_UID: '50',
+    OBLAST_NAME: '<Test & Region>'
+  });
+  const html=vm.runInContext('CONFIG.RED_MESSAGE',context);
+  assert.match(html, /&lt;Test &amp; Region&gt;/);
+  assert.doesNotMatch(html, /<Test/);
+});
+
+test('setupRegion does not pretend inactive-alert data verifies the UID', () => {
+  const {context} = createBot({
+    REGION_MODE: 'district',
+    DISTRICT_UID: '501',
+    DISTRICT_NAME: 'Тестовий район',
+    OBLAST_UID: '50',
+    OBLAST_NAME: 'Тестова область'
+  });
+  context.getRawAlertData=()=>({raw:{alerts:[]}});
+  const r=context.setupRegion();
+  assert.equal(r.matchedActiveAlerts,0);
+  assert.equal(r.uidValidation,'NOT_VERIFIABLE_WHEN_NO_MATCHING_ACTIVE_ALERTS');
+  assert.match(r.warning,/НЕ підтверджує UID/);
 });

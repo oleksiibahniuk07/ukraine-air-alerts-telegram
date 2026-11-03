@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * ПОВІТРЯНІ ТРИВОГИ — ЖИТОМИРСЬКИЙ РАЙОН
+ * ПОВІТРЯНІ ТРИВОГИ — УНІВЕРСАЛЬНИЙ ШАБЛОН ДЛЯ РЕГІОНІВ УКРАЇНИ
  * Telegram + історія Google Sheets + тижнева статистика + тихий режим
  * ============================================================
  */
@@ -10,14 +10,81 @@ function getProjectSetting_(name) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * Налаштування області/району задаються в Project Settings → Script Properties.
+ * Якщо жодної регіональної властивості немає, використовується
+ * сумісний із попередньою версією приклад Житомирського району.
+ * Будь-яка часткова власна конфігурація НЕ успадковує UID із прикладу:
+ * незаповнені обов'язкові поля зупиняють автоматизацію.
+ */
+function readRegionConfig_() {
+  const modeValue = getProjectSetting_('REGION_MODE').toLowerCase();
+  const districtUid = getProjectSetting_('DISTRICT_UID');
+  const districtName = getProjectSetting_('DISTRICT_NAME');
+  const oblastUid = getProjectSetting_('OBLAST_UID');
+  const oblastName = getProjectSetting_('OBLAST_NAME');
+  const extras = getProjectSetting_('ADDITIONAL_DISTRICT_UIDS');
+
+  const hasAnyOverride = Boolean(
+    modeValue || districtUid || districtName ||
+    oblastUid || oblastName || extras
+  );
+
+  if (!hasAnyOverride) {
+    return {
+      mode: 'district',
+      districtUid: '59',
+      districtName: 'Житомирський район',
+      oblastUid: '10',
+      oblastName: 'Житомирська область',
+      additionalDistrictUids: [],
+      usingExample: true
+    };
+  }
+
+  return {
+    mode: modeValue || 'district',
+    districtUid: districtUid,
+    districtName: districtName,
+    oblastUid: oblastUid,
+    oblastName: oblastName,
+    additionalDistrictUids: extras
+      ? extras.split(',').map(function (id) { return id.trim(); })
+      : [],
+    usingExample: false
+  };
+}
+
+function escapeTelegramHtml_(value) {
+  return String(value).replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function buildRegionScopeKey_(region) {
+  const ids = region.mode === 'oblast'
+    ? [region.oblastUid].concat(region.additionalDistrictUids)
+    : [region.oblastUid, region.districtUid];
+  // Окремий стан для кожної області/району/набору UID.
+  return 'aiu:region:v4:' + region.mode + ':' + ids.join(':');
+}
+
+const REGION_SETTINGS = readRegionConfig_();
+const REGION_DISPLAY_NAME = REGION_SETTINGS.mode === 'oblast'
+  ? REGION_SETTINGS.oblastName
+  : REGION_SETTINGS.districtName;
+
 const CONFIG = {
   API_URL: 'https://ubilling.net.ua/aerialalerts/?source=aiu&raw',
 
-  DISTRICT_UID: '59',
-  DISTRICT_NAME: 'Житомирський район',
-
-  OBLAST_UID: '10',
-  OBLAST_NAME: 'Житомирська область',
+  REGION_MODE: REGION_SETTINGS.mode,
+  DISTRICT_UID: REGION_SETTINGS.districtUid,
+  DISTRICT_NAME: REGION_SETTINGS.districtName,
+  OBLAST_UID: REGION_SETTINGS.oblastUid,
+  OBLAST_NAME: REGION_SETTINGS.oblastName,
+  ADDITIONAL_DISTRICT_UIDS: REGION_SETTINGS.additionalDistrictUids,
+  DISPLAY_REGION_NAME: REGION_DISPLAY_NAME,
+  USING_EXAMPLE_REGION: REGION_SETTINGS.usingExample,
 
   API_TIMEZONE: 'Europe/Kyiv',
 
@@ -36,17 +103,20 @@ const CONFIG = {
 
   // Для НОВОЇ інсталяції не публікувати активний статус одразу при першому запуску.
   // Можна увімкнути true, якщо потрібна початкова синхронізація з повідомленням.
-  STATE_SCOPE_KEY: 'aiu:zhytomyr-raion:59:levels-v3',
+  STATE_SCOPE_KEY: buildRegionScopeKey_(REGION_SETTINGS),
   PUBLISH_CURRENT_ON_SCOPE_CHANGE: false,
 
   YELLOW_MESSAGE:
-    '🟡 <b>Житомирський район — жовтий рівень повітряної тривоги!</b>',
+    '🟡 <b>' + escapeTelegramHtml_(REGION_DISPLAY_NAME) +
+    ' — жовтий рівень повітряної тривоги!</b>',
 
   RED_MESSAGE:
-    '🔴 <b>Житомирський район — червоний рівень повітряної тривоги!</b>',
+    '🔴 <b>' + escapeTelegramHtml_(REGION_DISPLAY_NAME) +
+    ' — червоний рівень повітряної тривоги!</b>',
 
   CLEAR_MESSAGE_TITLE:
-    '🟢 <b>Житомирський район — відбій повітряної тривоги!</b>',
+    '🟢 <b>' + escapeTelegramHtml_(REGION_DISPLAY_NAME) +
+    ' — відбій повітряної тривоги!</b>',
 
   // ID Google Sheets також прихований у Script Properties.
   HISTORY_SPREADSHEET_ID: getProjectSetting_('HISTORY_SPREADSHEET_ID'),
@@ -861,7 +931,9 @@ function buildWeeklyStatisticsMessage(stats, weekStart, weekEnd) {
     return (
       '📊 <b>Статистика за тиждень</b>' +
       '\n\n' +
-      '🟢 За минулий тиждень повітряних тривог у Житомирському районі не зафіксовано.' +
+      '🟢 За минулий тиждень повітряних тривог для території «' +
+      escapeTelegramHtml_(CONFIG.DISPLAY_REGION_NAME) +
+      '» не зафіксовано.' +
       '\n\n' +
       CONFIG.CHANNEL_FOOTER
     );
@@ -869,6 +941,7 @@ function buildWeeklyStatisticsMessage(stats, weekStart, weekEnd) {
 
   return (
     '📊 <b>Статистика повітряних тривог за тиждень</b>' +
+    '\n📍 ' + escapeTelegramHtml_(CONFIG.DISPLAY_REGION_NAME) +
     '\n' +
     '📅 ' +
     formatWeeklyDateRange(weekStart, weekEnd) +
@@ -1385,6 +1458,13 @@ function isRelevantLocation(alert) {
     locationUid === CONFIG.OBLAST_UID ||
     (locationTitle === normalizeText(CONFIG.OBLAST_NAME) &&
       (locationType === '' || locationType === 'oblast'));
+
+  // Обласний режим без додаткових UID відстежує лише події,
+  // оголошені на рівні області. Для охоплення районних подій
+  // потрібно явно вказати всі потрібні UID через ADDITIONAL_DISTRICT_UIDS.
+  if (CONFIG.REGION_MODE === 'oblast') {
+    return wholeOblast || CONFIG.ADDITIONAL_DISTRICT_UIDS.indexOf(locationUid) !== -1;
+  }
 
   return directDistrict || wholeOblast;
 }
@@ -2050,29 +2130,42 @@ function removeTriggersByFunctionNames(functionNames) {
  */
 
 function testDistrictLevelsApi() {
-  validateConfig();
+  return testRegionApi();
+}
+
+/**
+ * Безпечна перевірка території (без публікації Telegram).
+ * Якщо активних тривог немає, raw API не дозволяє
+ * підтвердити правильність UID — це НЕ означає, що UID валідні.
+ */
+function setupRegion() {
+  validateRegionConfig_();
+  return testRegionApi();
+}
+
+function testRegionApi() {
+  validateRegionConfig_();
 
   const snapshot = getDistrictAlertSnapshot();
+  const result = {
+    regionMode: CONFIG.REGION_MODE,
+    regionName: CONFIG.DISPLAY_REGION_NAME,
+    oblastUid: CONFIG.OBLAST_UID,
+    districtUid: CONFIG.REGION_MODE === 'district' ? CONFIG.DISTRICT_UID : null,
+    additionalDistrictUids: CONFIG.ADDITIONAL_DISTRICT_UIDS,
+    usingExampleRegion: CONFIG.USING_EXAMPLE_REGION,
+    matchedActiveAlerts: snapshot.matchedCount,
+    activeAlertsInSource: snapshot.totalActiveAlerts,
+    uidValidation: snapshot.matchedCount > 0
+      ? 'MATCHED_ACTIVE_ALERTS_ONLY'
+      : 'NOT_VERIFIABLE_WHEN_NO_MATCHING_ACTIVE_ALERTS',
+    warning: snapshot.matchedCount > 0
+      ? 'Збіг із поточними активними даними. Перевірте охоплення інших територій.'
+      : 'Немає відповідних активних тривог. Це НЕ підтверджує UID. Звірте їх із джерелом та протестуйте при відомій зміні статусу.'
+  };
 
-  console.log(
-    JSON.stringify(
-      {
-        district: CONFIG.DISTRICT_NAME,
-        districtUid: CONFIG.DISTRICT_UID,
-        resolvedLevel: snapshot.level,
-        active: snapshot.active,
-        matchedCount: snapshot.matchedCount,
-        totalActiveAlertsInSource: snapshot.totalActiveAlerts,
-        startedAt: snapshot.startedAt
-          ? new Date(snapshot.startedAt).toISOString()
-          : null,
-        sourceUpdatedAt: snapshot.sourceUpdatedAt,
-        matchedAlerts: snapshot.matchedAlerts
-      },
-      null,
-      2
-    )
-  );
+  console.log(JSON.stringify(result, null, 2));
+  return result;
 }
 
 function testYellowMessage() {
@@ -2153,6 +2246,10 @@ function showSystemStatus() {
   ];
   const status = {};
   safeKeys.forEach(function (key) { status[key] = p.getProperty(key); });
+  status.regionMode = CONFIG.REGION_MODE;
+  status.regionName = CONFIG.DISPLAY_REGION_NAME;
+  status.regionScope = CONFIG.STATE_SCOPE_KEY;
+  status.usingExampleRegion = CONFIG.USING_EXAMPLE_REGION;
   status.hasRecordedError = Boolean(p.getProperty('LAST_ERROR') || p.getProperty('LAST_HISTORY_ERROR'));
   status.telegramConfigured = Boolean(CONFIG.TELEGRAM_BOT_TOKEN && CONFIG.TARGET_CHAT_ID);
   status.historyConfigured = Boolean(CONFIG.HISTORY_SPREADSHEET_ID);
@@ -2221,14 +2318,55 @@ function stripHtmlTags(text) {
   return String(text || '').replace(/<[^>]*>/g, '');
 }
 
+/**
+ * Перевіряє параметри території до запуску тригерів.
+ * Значення UID мають відповідати фактичним UID джерела;
+ * лише синтаксична перевірка не підтверджує існування місця.
+ */
+function validateRegionConfig_() {
+  if (CONFIG.REGION_MODE !== 'district' && CONFIG.REGION_MODE !== 'oblast') {
+    throw new Error('REGION_MODE має бути district або oblast.');
+  }
+
+  function validUid_(id) {
+    return /^[1-9][0-9]*$/.test(String(id));
+  }
+
+  if (!validUid_(CONFIG.OBLAST_UID) || !CONFIG.OBLAST_NAME) {
+    throw new Error('Заповніть OBLAST_UID та OBLAST_NAME коректними даними API.');
+  }
+
+  if (CONFIG.REGION_MODE === 'district') {
+    if (!validUid_(CONFIG.DISTRICT_UID) || !CONFIG.DISTRICT_NAME) {
+      throw new Error('Для режиму district заповніть DISTRICT_UID та DISTRICT_NAME.');
+    }
+    if (CONFIG.DISTRICT_UID === CONFIG.OBLAST_UID) {
+      throw new Error('DISTRICT_UID не повинен збігатися з OBLAST_UID.');
+    }
+    if (CONFIG.ADDITIONAL_DISTRICT_UIDS.length) {
+      throw new Error('ADDITIONAL_DISTRICT_UIDS використовується тільки в режимі oblast.');
+    }
+  } else {
+    if (CONFIG.ADDITIONAL_DISTRICT_UIDS.some(function (id) {
+      return !validUid_(id) || id === CONFIG.OBLAST_UID;
+    })) {
+      throw new Error('Некоректний ADDITIONAL_DISTRICT_UIDS. Використовуйте числові UID районів через кому.');
+    }
+    if (new Set(CONFIG.ADDITIONAL_DISTRICT_UIDS).size !== CONFIG.ADDITIONAL_DISTRICT_UIDS.length) {
+      throw new Error('ADDITIONAL_DISTRICT_UIDS містить дублікати UID.');
+    }
+    if (CONFIG.DISTRICT_UID || CONFIG.DISTRICT_NAME) {
+      throw new Error('У режимі oblast залиште DISTRICT_UID та DISTRICT_NAME порожніми; використовуйте ADDITIONAL_DISTRICT_UIDS.');
+    }
+  }
+}
+
 function validateConfig() {
   if (!CONFIG.API_URL) {
     throw new Error('Заповніть API_URL.');
   }
 
-  if (!CONFIG.DISTRICT_UID || !CONFIG.DISTRICT_NAME) {
-    throw new Error('Заповніть DISTRICT_UID і DISTRICT_NAME.');
-  }
+  validateRegionConfig_();
 
   if (
     !CONFIG.TELEGRAM_BOT_TOKEN ||
